@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Calculator</title>
+<style>
+  :root {
+    --bg-top: #1b1d23;
+    --bg-bottom: #101116;
+    --panel: #23262e;
+    --key: #2c2f38;
+    --key-hover: #363a45;
+    --key-op: #ff9f43;
+    --key-op-hover: #ffb066;
+    --key-equal: #4cd97b;
+    --key-equal-hover: #6fe497;
+    --text-main: #f4f4f6;
+    --text-dim: #8b8f9a;
+    --font: 'Segoe UI', Roboto, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font);
+    background: radial-gradient(circle at top, var(--bg-top), var(--bg-bottom));
+    color: var(--text-main);
+  }
+
+  .calculator {
+    width: 320px;
+    background: var(--panel);
+    border-radius: 24px;
+    padding: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .display {
+    background: #16181d;
+    border-radius: 16px;
+    padding: 24px 18px 16px;
+    margin-bottom: 18px;
+    text-align: right;
+    overflow: hidden;
+  }
+
+  .expression {
+    min-height: 18px;
+    font-size: 14px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow-x: auto;
+    letter-spacing: 0.5px;
+  }
+
+  .result {
+    font-size: 40px;
+    font-weight: 600;
+    margin-top: 6px;
+    white-space: nowrap;
+    overflow-x: auto;
+    letter-spacing: 0.5px;
+  }
+
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  button {
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 500;
+    padding: 18px 0;
+    border-radius: 14px;
+    background: var(--key);
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.08s ease;
+  }
+
+  button:hover { background: var(--key-hover); }
+  button:active { transform: scale(0.94); }
+
+  .op {
+    background: transparent;
+    color: var(--key-op);
+    border: 1.5px solid var(--key-op);
+  }
+  .op:hover { background: rgba(255,159,67,0.12); color: var(--key-op-hover); border-color: var(--key-op-hover); }
+
+  .equal {
+    background: var(--key-equal);
+    color: #0d1710;
+    grid-column: span 2;
+  }
+  .equal:hover { background: var(--key-equal-hover); }
+
+  .clear, .del {
+    color: #ff6b6b;
+  }
+
+  .zero { grid-column: span 2; }
+</style>
+</head>
+<body>
+
+<div class="calculator">
+  <div class="display">
+    <div class="expression" id="expression">&nbsp;</div>
+    <div class="result" id="result">0</div>
+  </div>
+
+  <div class="keys">
+    <button class="clear" data-action="clear">AC</button>
+    <button class="del" data-action="delete">DEL</button>
+    <button class="op" data-action="percent">%</button>
+    <button class="op" data-value="÷">÷</button>
+
+    <button data-value="7">7</button>
+    <button data-value="8">8</button>
+    <button data-value="9">9</button>
+    <button class="op" data-value="×">×</button>
+
+    <button data-value="4">4</button>
+    <button data-value="5">5</button>
+    <button data-value="6">6</button>
+    <button class="op" data-value="−">−</button>
+
+    <button data-value="1">1</button>
+    <button data-value="2">2</button>
+    <button data-value="3">3</button>
+    <button class="op" data-value="+">+</button>
+
+    <button class="zero" data-value="0">0</button>
+    <button data-value=".">.</button>
+    <button class="equal" data-action="equals">=</button>
+  </div>
+</div>
+
+<script>
+  const expressionEl = document.getElementById('expression');
+  const resultEl = document.getElementById('result');
+
+  let expression = '';   // full expression as typed, e.g. "12+7×3"
+  let justEvaluated = false;
+
+  const operators = ['+', '−', '×', '÷'];
+
+  function isOperator(ch) {
+    return operators.includes(ch);
+  }
+
+  function lastChar() {
+    return expression.slice(-1);
+  }
+
+  // Convert display symbols to JS-evaluable operators
+  function toEvaluable(expr) {
+    return expr
+      .replace(/×/g, '*')
+      .replace(/÷/g, '/')
+      .replace(/−/g, '-');
+  }
+
+  function safeEvaluate(expr) {
+    const evaluable = toEvaluable(expr);
+    // Only allow digits, operators, parentheses, decimal points and spaces
+    if (!/^[0-9+\-*/.() ]+$/.test(evaluable)) return null;
+    try {
+      // eslint-disable-next-line no-new-func
+      const value = Function('"use strict"; return (' + evaluable + ')')();
+      if (typeof value !== 'number' || !isFinite(value)) return null;
+      return value;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function formatNumber(num) {
+    if (Number.isInteger(num)) return num.toString();
+    return parseFloat(num.toFixed(10)).toString();
+  }
+
+  function updateDisplay() {
+    expressionEl.textContent = expression || '\u00A0';
+
+    // live preview of result as user types, if expression is evaluable
+    if (expression === '') {
+      resultEl.textContent = '0';
+      return;
+    }
+
+    const trimmed = expression.replace(/[+\-×÷]$/, '');
+    const preview = safeEvaluate(trimmed);
+    resultEl.textContent = preview !== null ? formatNumber(preview) : expression;
+  }
+
+  function appendValue(value) {
+    if (justEvaluated) {
+      // Start fresh if user types a digit right after "=",
+      // but continue the expression if they type an operator.
+      if (isOperator(value)) {
+        justEvaluated = false;
+      } else {
+        expression = '';
+        justEvaluated = false;
+      }
+    }
+
+    if (isOperator(value)) {
+      if (expression === '' && value !== '−') return; // no leading operator (except minus for negatives)
+      if (isOperator(lastChar())) {
+        expression = expression.slice(0, -1) + value; // replace last operator
+      } else {
+        expression += value;
+      }
+    } else if (value === '.') {
+      // find current number segment (after last operator)
+      const parts = expression.split(/[+\-×÷]/);
+      const currentSegment = parts[parts.length - 1];
+      if (currentSegment.includes('.')) return; // already has a decimal
+      expression += currentSegment === '' ? '0.' : '.';
+    } else {
+      // digit
+      expression += value;
+    }
+
+    updateDisplay();
+  }
+
+  function clearAll() {
+    expression = '';
+    justEvaluated = false;
+    updateDisplay();
+  }
+
+  function deleteLast() {
+    if (justEvaluated) {
+      clearAll();
+      return;
+    }
+    expression = expression.slice(0, -1);
+    updateDisplay();
+  }
+
+  function applyPercent() {
+    const trimmed = expression.replace(/[+\-×÷]$/, '');
+    const value = safeEvaluate(trimmed);
+    if (value === null) return;
+    expression = formatNumber(value / 100);
+    updateDisplay();
+  }
+
+  function evaluateExpression() {
+    const trimmed = expression.replace(/[+\-×÷]$/, '');
+    const value = safeEvaluate(trimmed);
+    if (value === null) return;
+    expressionEl.textContent = expression;
+    expression = formatNumber(value);
+    resultEl.textContent = expression;
+    justEvaluated = true;
+  }
+
+  document.querySelector('.keys').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    const { action, value } = btn.dataset;
+
+    if (action === 'clear') return clearAll();
+    if (action === 'delete') return deleteLast();
+    if (action === 'percent') return applyPercent();
+    if (action === 'equals') return evaluateExpression();
+    if (value) return appendValue(value);
+  });
+
+  // Keyboard support
+  window.addEventListener('keydown', (e) => {
+    const key = e.key;
+    if (/[0-9]/.test(key)) return appendValue(key);
+    if (key === '.') return appendValue('.');
+    if (key === '+') return appendValue('+');
+    if (key === '-') return appendValue('−');
+    if (key === '*') return appendValue('×');
+    if (key === '/') { e.preventDefault(); return appendValue('÷'); }
+    if (key === 'Enter' || key === '=') { e.preventDefault(); return evaluateExpression(); }
+    if (key === 'Backspace') return deleteLast();
+    if (key === 'Escape') return clearAll();
+    if (key === '%') return applyPercent();
+  });
+
+  updateDisplay();
+</script>
+
+</body>
+</html>
